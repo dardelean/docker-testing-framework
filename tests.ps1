@@ -18,13 +18,17 @@ Import-Module "$WORK_PATH\DockerUtils"
 function New-Container {
     # Container can be created with or without volumes or ports exposed
     Param(
+        [Parameter(Mandatory=$true)]
         [string]$containerName,
+        [Parameter(Mandatory=$true)]
         [string]$containerImage,
         [switch]$exposePorts,
         [int]$nodePort,
         [int]$containerPort,
         [switch]$attachVolume,
-        [string]$volumeName
+        [string]$volumeName,
+        [switch]$bindMount,
+        [string]$mountPath
     )
 
     Start-ExternalCommand -ScriptBlock { docker pull $containerImage } `
@@ -40,6 +44,10 @@ function New-Container {
         $params = ("-v", "$volumeName`:/data") + $params
     }
 
+    if($bindMount) {
+        $params = ("-v", "$mountPath`:/data") + $params
+    }
+
     Start-ExternalCommand -ScriptBlock { docker run -d $params } `
     -ErrorMessage "`nFailed to create container`n"
 
@@ -49,7 +57,12 @@ function New-Container {
     return $containerID
 }
 
-function New-Volume([string]$volumeName) {
+function New-Volume {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$volumeName
+    )
+
     Start-ExternalCommand -ScriptBlock { docker volume create $volumeName } `
     -ErrorMessage "`nFailed to create docker volume with $LastExitCode`n"
 
@@ -58,7 +71,12 @@ function New-Volume([string]$volumeName) {
     # docker does not asign an ID to volume so cannot return one
 }
 
-function New-Image([string]$imageName) {
+function New-Image {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$imageName
+    )
+
     Start-ExternalCommand -ScriptBlock { docker pull $imageName } `
     -ErrorMessage "`nFailed to pull docker image with $LastExitCode`n"
 
@@ -68,7 +86,12 @@ function New-Image([string]$imageName) {
     return $imageID
 }
 
-function New-Network([string]$networkName) {
+function New-Network {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$networkName
+    )
+
     Start-ExternalCommand -ScriptBlock { docker network create $networkName } `
     -ErrorMessage "`nFailed to create network with $LastExitCode`n"
 
@@ -106,7 +129,11 @@ function Get-Attribute {
     return $attribute
 }
 
-function Get-SharedVolume([string]$containerName) {
+function Get-SharedVolume {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$containerName
+    )
     # Check if data in the shared volume is accessible 
     # from containers mountpoint
     $volumeData = docker exec $containerName ls /data
@@ -118,7 +145,12 @@ function Get-SharedVolume([string]$containerName) {
     }
 }
 
-function Get-Command([string]$containerName) {
+function Get-Command {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$containerName
+    )
+
     # Check if a command can be succsessfully run in a container
     Start-ExternalCommand -ScriptBlock { docker exec $containerName ls } `
     -ErrorMessage "`nFailed to exec command with $LastExitCode`n"
@@ -126,7 +158,14 @@ function Get-Command([string]$containerName) {
     Write-DebugMessage $isDebug -Message "Exec runned SUCCSESSFULLY"
 }
 
-function Connect-Network([string]$networkName, [string]$containerName) {
+function Connect-Network {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$networkName,
+        [Parameter(Mandatory=$true)]
+        [string]$containerName
+    )
+
     New-Network $networkName
 
     Start-ExternalCommand -ScriptBlock { docker network connect $networkName $containerName } `
@@ -153,7 +192,11 @@ function Clear-Environment {
     docker network prune --force
 }
 
-function Test-Restart([string]$containerName) {
+function Test-Restart {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$containerName
+    )
     # Restart container and see if all the functionalities
     # are available
     Start-ExternalCommand -ScriptBlock { docker restart $containerName } `
@@ -167,10 +210,11 @@ function Test-Restart([string]$containerName) {
 
 function Test-Building {
     Param(
+        [Parameter(Mandatory=$true)]
         [string]$containerName,
+        [Parameter(Mandatory=$true)]
         [string]$containerImage,
-        [int]$nodePort,
-        [int]$containerPort,
+        [Parameter(Mandatory=$true)]
         [string]$configPath
     )
 
@@ -179,10 +223,6 @@ function Test-Building {
 
     Start-ExternalCommand -ScriptBlock { docker build -f "$configPath\Dockerfile" -t testingimage . } `
     -ErrorMessage "`nFailed to build docker image`n"
-    
-    Start-ExternalCommand -ScriptBlock { docker run -d -p $nodePort`:$containerPort -v `
-    $configPath`:/data --name $containerName testingimage } `
-    -ErrorMessage "`nFailed to start container`n"
 
     docker stop $containerName
     docker rm $containerName
@@ -191,11 +231,14 @@ function Test-Building {
 }
 
 function Test-BasicFunctionality {
-    Param
-    (
+    Param(
+        [Parameter(Mandatory=$true)]
         [string]$volumeName,
+        [Parameter(Mandatory=$true)]
         [string]$imageName,
+        [Parameter(Mandatory=$true)]
         [string]$networkName,
+        [Parameter(Mandatory=$true)]
         [string]$containerName
     )
     Write-Output "`n============Starting functionality tests===============`n"
@@ -212,22 +255,29 @@ function Test-BasicFunctionality {
 
 function Test-BasicContainers {
     Param(
+        [Parameter(Mandatory=$true)]
         [string]$containerName,
+        [Parameter(Mandatory=$true)]
         [string]$containerImage,
+        [Parameter(Mandatory=$true)]
         [int]$nodePort,
+        [Parameter(Mandatory=$true)]
         [int]$containerPort,
+        [Parameter(Mandatory=$true)]
         [string]$configPath,
+        [Parameter(Mandatory=$true)]
         [string]$networkName
     )
 
     Write-Output "`n============Starting create container tests===============`n"
 
-    Test-Building $containerName $containerImage $nodePort $containerPort $configPath
-    # Create container and test all the functionalities on it 
-    New-Container $containerName $containerImage -exposePorts `
-    $nodePort $containerPort -attachVolume "volume1"
+    Test-Building $containerName $containerImage $configPath
+    # Create container and test all the functionalities on it
 
- 
+    New-Container -containerName $containerName -containerImage $containerImage `
+    -exposePorts -nodePort $nodePort -containerPort $containerPort `
+    -bindMount -mountPath $configPath
+
     # Execute functionality tests
     Get-Command $containerName
     Get-HTTPGet
