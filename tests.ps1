@@ -16,21 +16,32 @@ $NETWORK_NAME = "net1"
 Import-Module "$WORK_PATH\DockerUtils"
 
 function New-Container {
+    # Container can be created with or without volumes or ports exposed
     Param(
         [string]$containerName,
         [string]$containerImage,
+        [switch]$exposePorts,
         [int]$nodePort,
         [int]$containerPort,
-        [string]$configPath
+        [switch]$attachVolume,
+        [string]$volumeName
     )
 
     Start-ExternalCommand -ScriptBlock { docker pull $containerImage } `
     -ErrorMessage "`nFailed to pull docker image`n"
 
-    # Fire a container with a shared volume and a web server listening on 80
-    Start-ExternalCommand -ScriptBlock { docker run -d -p $nodePort`:$containerPort `
-    -v $configPath`:/data --name $containerName $containerImage } `
-    -ErrorMessage "`nError creating container`n"
+    $params = @("--name", $containerName, $containerImage)
+
+    if($exposePorts) {
+        $params = ("-p", "$nodePort`:$containerPort") + $params
+    }
+
+    if($attachVolume) {
+        $params = ("-v", "$volumeName`:/data") + $params
+    }
+
+    Start-ExternalCommand -ScriptBlock { docker run -d $params } `
+    -ErrorMessage "`nFailed to create container`n"
 
     Write-DebugMessage $isDebug -Message "Container created SUCCSESSFULLY"
 
@@ -149,7 +160,7 @@ function Test-Restart([string]$containerName) {
     -ErrorMessage "`nFailed to restart container`n"
 
     Get-HTTPGet
-    Get-SharedVolume $containerName
+    #Get-SharedVolume $containerName
 
     Write-DebugMessage $isDebug -Message "Restart container tests ran SUCCSESSFULLY"
 }
@@ -213,12 +224,14 @@ function Test-BasicContainers {
 
     Test-Building $containerName $containerImage $nodePort $containerPort $configPath
     # Create container and test all the functionalities on it 
-    New-Container $containerName $containerImage $nodePort $containerPort $configPath
+    New-Container $containerName $containerImage -exposePorts `
+    $nodePort $containerPort -attachVolume "volume1"
+
  
     # Execute functionality tests
     Get-Command $containerName
     Get-HTTPGet
-    Get-SharedVolume $containerName
+    #Get-SharedVolume $containerName
     Test-Restart $containerName
     Connect-Network $networkName $containerName
 
@@ -232,6 +245,7 @@ function Test-BasicContainers {
 }
 
 Clear-Environment
+
 Test-BasicFunctionality $VOLUME_NAME $CONTAINER_IMAGE $NETWORK_NAME $CONTAINER_NAME
 Test-BasicContainers $CONTAINER_NAME $CONTAINER_IMAGE $NODE_PORT $CONTAINER_PORT $CONFIGS_PATH $NETWORK_NAME
 
