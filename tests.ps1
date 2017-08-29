@@ -294,6 +294,12 @@ function Test-BasicContainers {
     Clear-Environment
 }
 
+# execution starts here
+cls
+
+$dockerVersion = docker version
+Write-Output $dockerVersion
+
 Clear-Environment
 
 Test-BasicFunctionality $VOLUME_NAME $CONTAINER_IMAGE $NETWORK_NAME $CONTAINER_NAME

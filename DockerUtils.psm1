@@ -27,14 +27,21 @@ function Start-ExternalCommand {
             # the variable is not to be trusted for error detection anyway.
             $LASTEXITCODE = ""
         }
+
+        $stopwatch=[System.Diagnostics.Stopwatch]::startNew()
         $res = Invoke-Command -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList
+        $stopwatch.Stop()
+        $exectime = $stopwatch.ElapsedMilliseconds
+
         if ($LASTEXITCODE) {
             if(!$ErrorMessage){
                 Throw ("Command exited with status: {0}" -f $LASTEXITCODE)
             }
             throw ("{0} (Exit code: $LASTEXITCODE)" -f $ErrorMessage)
         }
-        return $res
+
+        Write-Host "`nExecuting: `"$ScriptBlock`" elpased time:`t$exectime ms`n"
+        #return $res
     }
 }
 
