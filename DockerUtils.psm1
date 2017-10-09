@@ -41,7 +41,7 @@ function Start-ExternalCommand {
         }
 
         Write-Host "`nExecuting: `"$ScriptBlock`" elpased time:`t$exectime ms`n"
-        return $exectime
+        return [int]$exectime
     }
 }
 
@@ -61,7 +61,7 @@ function Write-DebugMessage {
         [string]$Message
     )
 
-        if ($isDebug -eq 'yes') { Write-Output "`n$Message`n" }
+        if ($isDebug -eq 'yes') { Write-Host "`n$Message`n" }
 }
 
 Export-ModuleMember -Function * -Alias *
