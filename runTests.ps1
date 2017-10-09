@@ -14,8 +14,18 @@ $NODE_PORT = 8080
 $VOLUME_NAME = "vol1"
 $NETWORK_NAME = "net1"
 $HOST_IP = 10.7.1.12
-
+$MINIMUM_PROCESS = "vmmem"
+    
 Import-Module "$WORK_PATH\DockerUtils"
+
+class WorkingSet
+{
+    # Optionally, add attributes to prevent invalid value
+    [ValidateNotNullOrEmpty()][int]$Total_Workingset
+    [ValidateNotNullOrEmpty()][int]$Private_Workingset
+    [ValidateNotNullOrEmpty()][int]$Shared_Workingset
+    [ValidateNotNullOrEmpty()][int]$CommitSize
+}
 
 class DockerFunctionalityTime
 {
@@ -305,13 +315,29 @@ function Test-Building {
     $time = Start-ExternalCommand -ScriptBlock { docker build -f "$configPath\Dockerfile" -t $containerName . } `
     -ErrorMessage "`nFailed to build docker image with $LastExitCode`n"
 
-    #Start-Sleep -s 5
-
-    docker stop $containerName
-    docker rm $containerName
+    #docker stop $containerName
+    #docker rm $containerName
 
     Write-DebugMessage $isDebug -Message "Container built SUCCSESSFULLY"
     return [int]$time
+}
+
+# The memory performance counter mapping between what''s shown in the Task Manager and those Powershell APIs for getting them
+# are super confusing. After many tries, I came out with the following mapping that matches with Taskmgr numbers on Windows 10
+#
+function ProcessWorkingSetInfoById
+{
+    param
+    ([int]$processId)
+
+    $obj = Get-WmiObject -class Win32_PerfFormattedData_PerfProc_Process | where{$_.idprocess -eq $processId} 
+
+    $ws = [WorkingSet]@{
+                        Total_Workingset = $obj.workingSet / 1kb
+                        Private_Workingset = $obj.workingSetPrivate / 1kb
+                        Shared_Workingset = ($obj.workingSet - $obj.workingSetPrivate) / 1kb
+                        CommitSize = $obj.PrivateBytes / 1kb }
+    return $ws
 }
 
 function Test-BasicFunctionality {
@@ -342,6 +368,19 @@ function Test-BasicFunctionality {
     $FunctionalityTime.CreateVolumeTime = New-Volume $volumeName
     $FunctionalityTime.CreateNetworkTime = New-Network $networkName
     $FunctionalityTime.BuildContainerTime = Test-Building $containerName $imageName $configPath
+
+    # Execute functionality tests
+    #Get-Command $containerName
+    #Get-HTTPGet
+    #Get-SharedVolume $containerName
+    #Test-Restart $containerName
+
+    # windows does not support connecting a running container to a network
+    #docker stop $containerName
+    #Connect-Network $networkName $containerName
+
+    #$created = Get-Attribute container $containerName Created
+    #Write-Output $created
 
     Write-Host "`n------------------------------------------"
     Write-Host " Test result for functionality tests in ms:"
@@ -389,34 +428,42 @@ function Test-Container {
     $containerName -containerImage $containerImage `
     -exposePorts -nodePort $nodePort -containerPort $containerPort `
     -bindMount -mountPath $configPath
+
     $OperationTime.StartContainerTime = Start-Container $containerName
+
     $OperationTime.ExecProcessInContainerTime = Exec-Command $containerName
+
+    $newProcess = Get-Process vmmem
+    $workinginfo = ProcessWorkingSetInfoById $newProcess.id
+
+    $UVM = Get-ComputeProcess 
+
+    # get the OS memory usage from the guest os
+    $memoryUsedByUVMOS=hcsdiag exec -uvm $UVM.id free
+
     $OperationTime.StopContainerTime = Stop-Container $containerName
     $OperationTime.RemoveContainerTime = Remove-Container $containerName
     $OperationTime.RemoveImageTime = Remove-Image $containerImage
 
-    # Execute functionality tests
-    #Get-Command $containerName
-    #Get-HTTPGet
-    #Get-SharedVolume $containerName
-    #Test-Restart $containerName
-
-    # windows does not support connecting a running container to a network
-    #docker stop $containerName
-    #Connect-Network $networkName $containerName
-
-    #$created = Get-Attribute container $containerName Created
-    #Write-Output $created
-
-    #Write-Output "`n============Create container tests PASSED===============`n"
-
-    # Cleanup container
-    #Clear-Environment
     Write-Host "`n------------------------------------------"
     Write-Host " Test result for container tests in ms:"
     Write-Host "------------------------------------------"
 
     $OperationTime | Format-Table
+
+    Write-Host "`n------------------------------------------"
+    Write-Host " Container memory stats in kb:"
+    Write-Host "------------------------------------------"
+
+    $workinginfo | Format-Table
+
+    Write-Host "`nMemory used by the Linux OS running inside the new UVM"
+    Write-Output $memoryUsedByUVMOS
+    Write-Host "------------------------------------------"
+
+    Write-Output "`n============Create container tests PASSED===============`n"
+
+    Clear-Environment
 }
 
 $env:PATH = "C:\Users\dan\go\src\github.com\docker\docker\bundles\;" + $env:PATH
