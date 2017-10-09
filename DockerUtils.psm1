@@ -41,7 +41,7 @@ function Start-ExternalCommand {
         }
 
         Write-Host "`nExecuting: `"$ScriptBlock`" elpased time:`t$exectime ms`n"
-        #return $res
+        return $exectime
     }
 }
 

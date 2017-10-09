@@ -12,6 +12,7 @@ $CONTAINER_PORT = 80
 $NODE_PORT = 8080
 $VOLUME_NAME = "vol1"
 $NETWORK_NAME = "net1"
+$HOST_IP = 10.7.1.12
 
 Import-Module "$WORK_PATH\DockerUtils"
 
@@ -92,7 +93,8 @@ function New-Network {
         [string]$networkName
     )
 
-    Start-ExternalCommand -ScriptBlock { docker network create $networkName } `
+    # driver type is 'nat', bridge equivalent for Linux
+    Start-ExternalCommand -ScriptBlock { docker network create -d nat $networkName } `
     -ErrorMessage "`nFailed to create network with $LastExitCode`n"
 
     Write-DebugMessage $isDebug -Message "Network created SUCCSESSFULLY"
@@ -103,7 +105,7 @@ function New-Network {
 
 function Get-HTTPGet {
     # Check if the container responds on 8080
-    $res = Invoke-WebRequest -Uri http://localhost:8080
+    $res = Invoke-WebRequest -Uri http://$HOST_IP:8080
     if ($res.StatusCode -gt 400) {
         throw "`nContainer did NOT respond to HTTP GET`n"
         exit
@@ -221,8 +223,10 @@ function Test-Building {
     (Get-Content "$configPath\Dockerfile").replace('image', $containerImage) `
     | Set-Content "$configPath\Dockerfile"
 
-    Start-ExternalCommand -ScriptBlock { docker build -f "$configPath\Dockerfile" -t testingimage . } `
+    Start-ExternalCommand -ScriptBlock { docker build -f "$configPath\Dockerfile" -t $containerName . } `
     -ErrorMessage "`nFailed to build docker image`n"
+
+    #Start-Sleep -s 5
 
     docker stop $containerName
     docker rm $containerName
@@ -283,6 +287,9 @@ function Test-BasicContainers {
     Get-HTTPGet
     #Get-SharedVolume $containerName
     Test-Restart $containerName
+
+    # windows does not support connecting a running container to a network
+    docker stop $containerName
     Connect-Network $networkName $containerName
 
     #$created = Get-Attribute container $containerName Created
@@ -294,6 +301,7 @@ function Test-BasicContainers {
     Clear-Environment
 }
 
+$env:PATH = "C:\Users\dan\go\src\github.com\docker\docker\bundles\;" + $env:PATH
 # execution starts here
 cls
 
