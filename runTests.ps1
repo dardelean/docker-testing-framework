@@ -7,13 +7,14 @@ Param(
 $ErrorActionPreference = "Stop"
 $WORK_PATH = Split-Path -parent $MyInvocation.MyCommand.Definition
 $CONFIGS_PATH = $WORK_PATH + "\configs\"
+$BINDMOUNT_PATH = $WORK_PATH + "\test\"
 $CONTAINER_NAME = "container1"
 $CONTAINER_IMAGE = "nginx"
 $CONTAINER_PORT = 80
 $NODE_PORT = 8080
 $VOLUME_NAME = "vol1"
 $NETWORK_NAME = "net1"
-$HOST_IP = 10.7.1.12
+$HOST_IP = "10.7.1.12"
 $MINIMUM_PROCESS = "vmmem"
     
 Import-Module "$WORK_PATH\DockerUtils"
@@ -32,8 +33,10 @@ class DockerFunctionalityTime
     # Optionally, add attributes to prevent invalid values
     [ValidateNotNullOrEmpty()][int]$PullImageTime
     [ValidateNotNullOrEmpty()][int]$CreateVolumeTime
-    [ValidateNotNullOrEmpty()][int]$CreateNetworkTime
     [ValidateNotNullOrEmpty()][int]$BuildContainerTime
+    [ValidateNotNullOrEmpty()][int]$CreateNetworkTime
+    [ValidateNotNullOrEmpty()][int]$ConnectNetworkTime
+    [ValidateNotNullOrEmpty()][int]$HTTPGetTime
 }
 
 class DockerOperationTime
@@ -43,6 +46,7 @@ class DockerOperationTime
     [ValidateNotNullOrEmpty()][int]$CreateContainerTime
     [ValidateNotNullOrEmpty()][int]$StartContainerTime
     [ValidateNotNullOrEmpty()][int]$ExecProcessInContainerTime
+    [ValidateNotNullOrEmpty()][int]$RestartContainerTime
     [ValidateNotNullOrEmpty()][int]$StopContainerTime
     [ValidateNotNullOrEmpty()][int]$RunContainerTime
     [ValidateNotNullOrEmpty()][int]$RemoveContainerTime
@@ -206,14 +210,26 @@ function New-Network {
 }
 
 function Get-HTTPGet {
-    # Check if the container responds on 8080
-    $res = Invoke-WebRequest -Uri http://10.7.1.12:8080
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$host_ip
+    )
+
+    $address = 'http://' + $host_ip + ':8080'
+    $stopwatch=[System.Diagnostics.Stopwatch]::startNew()
+    $res = Invoke-WebRequest -Uri $address
+    $stopwatch.Stop()
+    $exectime = $stopwatch.ElapsedMilliseconds
+
     if ($res.StatusCode -gt 400) {
         throw "`nContainer did NOT respond to HTTP GET`n"
         exit
     } else {
         Write-DebugMessage $isDebug -Message "Container responded to HTTP GET SUCCSESSFULLY"
+        Write-Output "`nExecuting: HTTPGet`t`tPASSED  elpased time:`t$exectime ms`n" >> tests.log
     }
+
+    return [int]$exectime
 }
 
 function Get-Attribute {
@@ -246,6 +262,7 @@ function Get-SharedVolume {
         
     } else {
         Write-DebugMessage $isDebug -Message "Container shared volume accessed SUCCSESSFULLY"
+        Write-Output "`nExecuting: access shared volume`t`tPASSED  elpased time:`t$exectime ms`n" >> tests.log
     }
 }
 
@@ -256,8 +273,6 @@ function Connect-Network {
         [Parameter(Mandatory=$true)]
         [string]$containerName
     )
-
-    New-Network $networkName
 
     Start-ExternalCommand -ScriptBlock { docker network connect $networkName $containerName } `
     -ErrorMessage "`nFailed to connect network to container with $LastExitCode`n"
@@ -312,7 +327,7 @@ function Test-Building {
     (Get-Content "$configPath\Dockerfile").replace('image', $containerImage) `
     | Set-Content "$configPath\Dockerfile"
 
-    $time = Start-ExternalCommand -ScriptBlock { docker build -f "$configPath\Dockerfile" -t $containerName . } `
+    $time = Start-ExternalCommand -ScriptBlock { docker build -f "$configPath\Dockerfile" -t $imageName . } `
     -ErrorMessage "`nFailed to build docker image with $LastExitCode`n"
 
     #docker stop $containerName
@@ -320,6 +335,21 @@ function Test-Building {
 
     Write-DebugMessage $isDebug -Message "Container built SUCCSESSFULLY"
     return [int]$time
+}
+
+function Start-BuiltContainer {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$containerImage,
+        [Parameter(Mandatory=$true)]
+        [string]$containerName,
+        [Parameter(Mandatory=$true)]
+        [string]$bindMount
+    )
+
+    Start-ExternalCommand -ScriptBlock { docker run --name $containerName -d -p 8080:80 -v "$bindMount`:/data" $containerImage } `
+    -ErrorMessage "`nFailed to run built docker image with $LastExitCode`n"
+
 }
 
 # The memory performance counter mapping between what''s shown in the Task Manager and those Powershell APIs for getting them
@@ -351,14 +381,20 @@ function Test-BasicFunctionality {
         [Parameter(Mandatory=$true)]
         [string]$containerName,
         [Parameter(Mandatory=$true)]
-        [string]$configPath
+        [string]$configPath,
+        [Parameter(Mandatory=$true)]
+        [string]$bindMountPath,
+        [Parameter(Mandatory=$true)]
+        [string]$host_ip
     )
 
     $FunctionalityTime = [DockerFunctionalityTime]@{
                     PullImageTime = 0
                     CreateVolumeTime = 0
-                    CreateNetworkTime = 0
                     BuildContainerTime = 0
+                    CreateNetworkTime = 0
+                    ConnectNetworkTime = 0
+                    HTTPGetTime = 0
                     }
 
     Write-Output "`n================================================================" >> tests.log
@@ -368,18 +404,16 @@ function Test-BasicFunctionality {
     # Run the functionalities tests, no containers yet
     $FunctionalityTime.PullImageTime  = New-Image $imageName
     $FunctionalityTime.CreateVolumeTime = New-Volume $volumeName
-    $FunctionalityTime.CreateNetworkTime = New-Network $networkName
     $FunctionalityTime.BuildContainerTime = Test-Building $containerName $imageName $configPath
 
-    # Execute functionality tests
-    #Get-Command $containerName
-    #Get-HTTPGet
-    #Get-SharedVolume $containerName
-    #Test-Restart $containerName
-
+    $FunctionalityTime.CreateNetworkTime = New-Network $networkName
     # windows does not support connecting a running container to a network
-    #docker stop $containerName
-    #Connect-Network $networkName $containerName
+    docker stop $containerName
+    $FunctionalityTime.ConnectNetworkTime = Connect-Network $networkName $containerName
+    Start-BuiltContainer $imageName $containerName $bindMountPath
+    $FunctionalityTime.HTTPGetTime = Get-HTTPGet $host_ip
+    Get-SharedVolume $containerName
+
 
     #$created = Get-Attribute container $containerName Created
     #Write-Output $created
@@ -388,8 +422,6 @@ function Test-BasicFunctionality {
     Write-Output " Test result for functionality tests in ms:" >> tests.log
     Write-Output "----------------------------------------------------------------" >> tests.log
     $FunctionalityTime | Format-Table >> tests.log
-    #$FunctionalityTime | Format-Table
-
 
     Clear-Environment
 
@@ -419,6 +451,7 @@ function Test-Container {
                     CreateContainerTime = 0
                     StartContainerTime = 0
                     ExecProcessInContainerTime = 0
+                    RestartContainerTime = 0 
                     StopContainerTime = 0
                     RunContainerTime = 0
                     RemoveContainerTime = 0
@@ -433,11 +466,11 @@ function Test-Container {
     $OperationTime.CreateContainerTime = Create-Container -containerName `
     $containerName -containerImage $containerImage `
     -exposePorts -nodePort $nodePort -containerPort $containerPort `
-    -bindMount -mountPath $configPath
 
     $OperationTime.StartContainerTime = Start-Container $containerName
 
     $OperationTime.ExecProcessInContainerTime = Exec-Command $containerName
+    $OperationTime.RestartContainerTime = Test-Restart $containerName
 
     $newProcess = Get-Process vmmem
     $workinginfo = ProcessWorkingSetInfoById $newProcess.id
@@ -491,7 +524,7 @@ $dockerVersion > tests.log
 
 Clear-Environment
 
-Test-BasicFunctionality $VOLUME_NAME $CONTAINER_IMAGE $NETWORK_NAME $CONTAINER_NAME $CONFIGS_PATH
+Test-BasicFunctionality $VOLUME_NAME $CONTAINER_IMAGE $NETWORK_NAME $CONTAINER_NAME $CONFIGS_PATH $BINDMOUNT_PATH $HOST_IP
 "`n`n`n" >> tests.log
 Test-Container $CONTAINER_NAME $CONTAINER_IMAGE $NODE_PORT $CONTAINER_PORT $CONFIGS_PATH $NETWORK_NAME
 
