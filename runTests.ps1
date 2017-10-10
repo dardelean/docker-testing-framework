@@ -268,19 +268,19 @@ function Connect-Network {
 function Clear-Environment {
     # Delete existing containers, volumes or images if any
     if($(docker ps -a -q).count -ne 0) {
-        docker stop $(docker ps -a -q)
-        docker rm $(docker ps -a -q)  
+        $ignoredResult = docker stop $(docker ps -a -q)
+        $ignoredResult = docker rm $(docker ps -a -q)  
     }
 
     if($(docker volume list -q).count -ne 0) {
-        docker volume rm $(docker volume list -q)
+        $ignoredResult = docker volume rm $(docker volume list -q)
     }
 
     if ($(docker images -a -q).count -ne 0) {
-        docker rmi -f (docker images -a -q)
+        $ignoredResult = docker rmi -f (docker images -a -q)
     }
 
-    docker network prune --force
+    $ignoredResult = docker network prune --force
 
     Write-DebugMessage $isDebug -Message "Cleanup SUCCSESSFULL"
 }
@@ -361,7 +361,9 @@ function Test-BasicFunctionality {
                     BuildContainerTime = 0
                     }
 
-    Write-Output "`n============Starting functionality tests===============`n"
+    Write-Output "`n================================================================" >> tests.log
+    Write-Output "Starting functionality tests" >> tests.log
+    Write-Output "================================================================" >> tests.log
     
     # Run the functionalities tests, no containers yet
     $FunctionalityTime.PullImageTime  = New-Image $imageName
@@ -382,16 +384,18 @@ function Test-BasicFunctionality {
     #$created = Get-Attribute container $containerName Created
     #Write-Output $created
 
-    Write-Host "`n------------------------------------------"
-    Write-Host " Test result for functionality tests in ms:"
-    Write-Host "------------------------------------------"
-
-    $FunctionalityTime | Format-Table
+    Write-Output "----------------------------------------------------------------" >> tests.log
+    Write-Output " Test result for functionality tests in ms:" >> tests.log
+    Write-Output "----------------------------------------------------------------" >> tests.log
+    $FunctionalityTime | Format-Table >> tests.log
+    #$FunctionalityTime | Format-Table
 
 
     Clear-Environment
 
-    Write-Output "`n============Functionality tests PASSED===============`n"
+    Write-Output "================================================================" >> tests.log
+    Write-Output "Functionality tests PASSED" >> tests.log
+    Write-Output "================================================================" >> tests.log
 }
 
 function Test-Container {
@@ -421,7 +425,9 @@ function Test-Container {
                     RemoveImageTime = 0
                     }
 
-    Write-Output "`n============Starting create container tests===============`n"
+    Write-Output "================================================================" >> tests.log
+    Write-Output "Starting create container tests" >> tests.log
+    Write-Output "================================================================" >> tests.log
 
     $OperationTime.PullImageTime = New-Image $containerImage
     $OperationTime.CreateContainerTime = Create-Container -containerName `
@@ -445,37 +451,49 @@ function Test-Container {
     $OperationTime.RemoveContainerTime = Remove-Container $containerName
     $OperationTime.RemoveImageTime = Remove-Image $containerImage
 
-    Write-Host "`n------------------------------------------"
-    Write-Host " Test result for container tests in ms:"
-    Write-Host "------------------------------------------"
+    Write-Output "----------------------------------------------------------------" >> tests.log
+    Write-Output " Test result for container tests in ms" >> tests.log
+    Write-Output "----------------------------------------------------------------" >> tests.log
 
-    $OperationTime | Format-Table
+    $OperationTime | Format-Table >> tests.log
+    #$OperationTime | Format-Table
 
-    Write-Host "`n------------------------------------------"
-    Write-Host " Container memory stats in kb:"
-    Write-Host "------------------------------------------"
+    Write-Output "----------------------------------------------------------------" >> tests.log
+    Write-Output " Container memory stats in kb" >> tests.log
+    Write-Output "----------------------------------------------------------------" >> tests.log
 
-    $workinginfo | Format-Table
+    $workinginfo | Format-Table >> tests.log
+    #$workinginfo | Format-Table
 
-    Write-Host "`nMemory used by the Linux OS running inside the new UVM"
-    Write-Output $memoryUsedByUVMOS
-    Write-Host "------------------------------------------"
+    Write-Output "----------------------------------------------------------------" >> tests.log
+    Write-Output "Memory used by the Linux OS running inside the new UVM" >> tests.log
+    Write-Output "----------------------------------------------------------------" >> tests.log
+    Write-Output $memoryUsedByUVMOS >> tests.log
 
-    Write-Output "`n============Create container tests PASSED===============`n"
+    #$containerTestsMemSize >> tests.log
+    #$memoryUsedByUVMOS >> tests.log
+    Write-Output "----------------------------------------------------------------" >> tests.log
+
+    Write-Output "`n================================================================" >> tests.log
+    Write-Output "Container tests PASSED" >> tests.log
+    Write-Output "================================================================" >> tests.log
 
     Clear-Environment
 }
 
 $env:PATH = "C:\Users\dan\go\src\github.com\docker\docker\bundles\;" + $env:PATH
 # execution starts here
-cls
 
 $dockerVersion = docker version
-Write-Output $dockerVersion
+#Write-Output $dockerVersion 
+$dockerVersion > tests.log
+"`n`n" >> tests.log
 
 Clear-Environment
 
 Test-BasicFunctionality $VOLUME_NAME $CONTAINER_IMAGE $NETWORK_NAME $CONTAINER_NAME $CONFIGS_PATH
+"`n`n`n" >> tests.log
 Test-Container $CONTAINER_NAME $CONTAINER_IMAGE $NODE_PORT $CONTAINER_PORT $CONFIGS_PATH $NETWORK_NAME
 
-Write-Output "`n============All tests PASSED===============`n"
+Write-Output "`n=========================All tests PASSED=======================`n" >> tests.log
+Write-Output "`n=========================All tests PASSED=======================`n"

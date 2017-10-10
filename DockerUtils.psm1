@@ -40,7 +40,8 @@ function Start-ExternalCommand {
             throw ("{0} (Exit code: $LASTEXITCODE)" -f $ErrorMessage)
         }
 
-        Write-Host "`nExecuting: `"$ScriptBlock`" elpased time:`t$exectime ms`n"
+        $testStatus =  "`nExecuting: `"$ScriptBlock`"`t`tPASSED  elpased time:`t$exectime ms`n"
+        $testStatus >> tests.log
         return [int]$exectime
     }
 }
