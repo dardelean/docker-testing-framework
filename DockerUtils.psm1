@@ -28,21 +28,25 @@ function Start-ExternalCommand {
             $LASTEXITCODE = ""
         }
 
-        $stopwatch=[System.Diagnostics.Stopwatch]::startNew()
-        $res = Invoke-Command -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList
+        $res = @()
+
+        $stopwatch=[System.Diagnostics.Stopwatch]::startNew() 
+        $ignoredResult = Invoke-Command -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList
+        $returnCode = $LASTEXITCODE
         $stopwatch.Stop()
-        $exectime = $stopwatch.ElapsedMilliseconds
+        $execTime = $stopwatch.ElapsedMilliseconds
+
+        $res += [int]$returnCode
+        $res += [int]$execTime
 
         if ($LASTEXITCODE) {
             if(!$ErrorMessage){
-                Throw ("Command exited with status: {0}" -f $LASTEXITCODE)
+                Write-Output ("Command exited with status: {0}" -f $LASTEXITCODE) >> tests.log
             }
-            throw ("{0} (Exit code: $LASTEXITCODE)" -f $ErrorMessage)
+            Write-Output ("{0} (Exit code: $LASTEXITCODE)" -f $ErrorMessage) >> tests.log
         }
 
-        $testStatus =  "`nExecuting: `"$ScriptBlock`"`t`tPASSED  elpased time:`t$exectime ms`n"
-        $testStatus >> tests.log
-        return [int]$exectime
+        return $res
     }
 }
 
