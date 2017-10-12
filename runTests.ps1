@@ -6,8 +6,8 @@ Param(
 
 #$ErrorActionPreference = "Stop"
 $WORK_PATH = Split-Path -parent $MyInvocation.MyCommand.Definition
-$CONFIGS_PATH = $WORK_PATH + "\configs\"
-$BINDMOUNT_PATH = $WORK_PATH + "\test\"
+$CONFIGS_PATH = $WORK_PATH + "\configs\Dockerfile"
+$BINDMOUNT_PATH = $WORK_PATH + "\test:/test"
 $CONTAINER_NAME = "container1"
 $BUILD_CONTAINER_IMAGE_NAME = "containervol1"
 $CONTAINER_IMAGE = "nginx"
@@ -34,6 +34,7 @@ class DockerTestsStatus
     [ValidateNotNullOrEmpty()][string]$CreateVolumeTest
     [ValidateNotNullOrEmpty()][string]$BuildContainerTest
     [ValidateNotNullOrEmpty()][string]$CreateNetworkTest
+    [ValidateNotNullOrEmpty()][string]$StartBuiltContainerTest
     [ValidateNotNullOrEmpty()][string]$ConnectNetworkTest
     [ValidateNotNullOrEmpty()][string]$HTTPGetTest
     [ValidateNotNullOrEmpty()][string]$CreateContainerTest
@@ -53,6 +54,7 @@ class DockerTestsTimer
     [ValidateNotNullOrEmpty()][int]$CreateVolumeTime
     [ValidateNotNullOrEmpty()][int]$BuildContainerTime
     [ValidateNotNullOrEmpty()][int]$CreateNetworkTime
+    [ValidateNotNullOrEmpty()][int]$StartBuiltContainerTime
     [ValidateNotNullOrEmpty()][int]$ConnectNetworkTime
     [ValidateNotNullOrEmpty()][int]$HTTPGetTime
     [ValidateNotNullOrEmpty()][int]$CreateContainerTime
@@ -63,9 +65,10 @@ class DockerTestsTimer
     [ValidateNotNullOrEmpty()][int]$RunContainerTime
     [ValidateNotNullOrEmpty()][int]$RemoveContainerTime
     [ValidateNotNullOrEmpty()][int]$RemoveImageTime
+    [ValidateNotNullOrEmpty()][int]$SharedVolumeTime
 }
 
-function Create-Container {
+function Test-CreateContainer {
     # Container can be created with or without volumes or ports exposed
     Param(
         [Parameter(Mandatory=$true)]
@@ -109,142 +112,6 @@ function Create-Container {
     $TestsTimers.CreateContainerTime = $exec[1]
 }
 
-function Start-Container {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$containerName
-    )
-
-    $exec = Start-ExternalCommand -ScriptBlock { docker start $containerName } `
-    -ErrorMessage "`nFailed to start container with $LastExitCode`n"
-
-    if ($exec[0] -eq '0') {
-        $TestsStatus.StartContainerTest = "PASSED"
-        Write-DebugMessage $isDebug -Message "Container started SUCCESSFULLY"
-    }
-
-    $TestsTimers.StartContainerTime = $exec[1]
-}
-
-function Exec-Command {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$containerName
-    )
-
-    # Check if a command can be SUCCESSFULLY run in a container
-    $exec = Start-ExternalCommand -ScriptBlock { docker exec $containerName ls } `
-    -ErrorMessage "`nFailed to exec command with $LastExitCode`n"
-
-    if ($exec[0] -eq '0') {
-        $TestsStatus.ExecProcessInContainerTest = "PASSED"
-        Write-DebugMessage $isDebug -Message "Exec runned SUCCESSFULLY"
-    }
-
-    $TestsTimers.ExecProcessInContainerTime = $exec[1]
-}
-
-function Stop-Container {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$containerName
-    )
-
-    $exec = Start-ExternalCommand -ScriptBlock { docker stop $containerName } `
-    -ErrorMessage "`nFailed to stop container with $LastExitCode`n"
-
-    if ($exec[0] -eq '0') {
-        $TestsStatus.StopContainerTest = "PASSED"
-        Write-DebugMessage $isDebug -Message "Container stopped SUCCESSFULLY"
-    }
-
-    $TestsTimers.StopContainerTime = $exec[1]
-}
-
-function Remove-Container {
-    Param(
-        [string]$containerName
-    )
-
-    $exec = Start-ExternalCommand -ScriptBlock { docker rm $containerName } `
-    -ErrorMessage "`nFailed to remove container with $LastExitCode`n"
-
-    if ($exec[0] -eq '0') {
-        $TestsStatus.RemoveContainerTest = "PASSED"
-        Write-DebugMessage $isDebug -Message "Container removed SUCCESSFULLY"
-    }
-
-    $TestsTimers.RemoveContainerTime = $exec[1]
-}
-
-function Remove-Image {
-    Param(
-        [string]$containerImage
-    )
-
-    $exec = Start-ExternalCommand -ScriptBlock { docker rmi $containerImage } `
-    -ErrorMessage "`nFailed to remove image with $LastExitCode`n"
-
-    if ($exec[0] -eq '0') {
-        $TestsStatus.RemoveImageTest = "PASSED"
-        Write-DebugMessage $isDebug -Message "Image removed SUCCESSFULLY"
-    }
-
-    $TestsTimers.RemoveImageTime = $exec[1]
-}
-
-function New-Image {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$imageName
-    )
-
-    $exec = Start-ExternalCommand -ScriptBlock { docker pull $imageName } `
-    -ErrorMessage "`nFailed to pull docker image with $LastExitCode`n"
-
-    if ($exec[0] -eq '0') {
-        $TestsStatus.PullImageTest = "PASSED"
-        Write-DebugMessage $isDebug -Message "Image pulled SUCCESSFULLY"
-    }
-
-    $TestsTimers.PullImageTime = $exec[1]
-}
-
-function New-Volume {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$volumeName
-    )
-
-    $exec = Start-ExternalCommand -ScriptBlock { docker volume create $volumeName } `
-    -ErrorMessage "`nFailed to create docker volume with $LastExitCode`n"
-
-    if ($exec[0] -eq 0) {
-        $TestsStatus.CreateVolumeTest = "PASSED"
-        Write-DebugMessage $isDebug -Message "Volume created SUCCESSFULLY"
-    }
-
-    $TestsTimers.CreateVolumeTime = $exec[1]
-}
-
-function New-Network {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$networkName
-    )
-
-    # driver type is 'nat', bridge equivalent for Linux
-    $exec = Start-ExternalCommand -ScriptBlock { docker network create -d nat $networkName } `
-    -ErrorMessage "`nFailed to create network with $LastExitCode`n"
-
-    if ($exec[0] -eq 0) {
-        $TestsStatus.CreateNetworkTest = "PASSED"
-        Write-DebugMessage $isDebug -Message "Network created SUCCESSFULLY"
-    }
-
-    $TestsTimers.CreateNetworkTime = $exec[1]
-}
-
 function Get-HTTPGet {
     Param(
         [Parameter(Mandatory=$true)]
@@ -284,42 +151,6 @@ function Get-Attribute {
     return $attribute
 }
 
-function Get-SharedVolume {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$containerName
-    )
-    # Check if data in the shared volume is accessible 
-    # from containers mountpoint
-    $volumeData = docker exec $containerName ls /data
-    if(!$volumeData) {
-        $TestsStatus.SharedVolumeTest = "FAILED"
-        
-    } else {
-        Write-DebugMessage $isDebug -Message "Container shared volume accessed SUCCESSFULLY"
-        $TestsStatus.SharedVolumeTest = "PASSED"
-    }
-}
-
-function Connect-Network {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$networkName,
-        [Parameter(Mandatory=$true)]
-        [string]$containerName
-    )
-
-    $exec = Start-ExternalCommand -ScriptBlock { docker network connect $networkName $containerName } `
-    -ErrorMessage "`nFailed to connect network to container with $LastExitCode`n"
-
-    if ($exec[0] -eq 0) {
-        $TestsStatus.ConnectNetworkTest = "PASSED"
-        Write-DebugMessage $isDebug -Message "Network connected SUCCESSFULLY"
-    }
-
-    $TestsTimers.ConnectNetworkTime = $exec[1]
-}
-
 function Clear-Environment {
     # Delete existing containers, volumes or images if any
     if($(docker ps -a -q).count -ne 0) {
@@ -340,64 +171,6 @@ function Clear-Environment {
     Write-DebugMessage $isDebug -Message "Cleanup SUCCSESSFULL"
 }
 
-function Test-Restart {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$containerName
-    )
-    # Restart container and see if all the functionalities
-    # are available
-    $exec = Start-ExternalCommand -ScriptBlock { docker restart $containerName } `
-    -ErrorMessage "`nFailed to restart container with $LastExitCode`n"
-
-    if ($exec[0] -eq 0) {
-        $TestsStatus.RestartContainerTest = "PASSED"
-        Write-DebugMessage $isDebug -Message "Restart container tests ran SUCCESSFULLY"
-    }
-
-    $TestsTimers.RestartContainerTime = $exec[1]
-}
-
-function Test-Building {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$containerName,
-        [Parameter(Mandatory=$true)]
-        [string]$containerImage,
-        [Parameter(Mandatory=$true)]
-        [string]$configPath,
-        [Parameter(Mandatory=$true)]
-        [string]$imageName
-    )
-
-    (Get-Content "$configPath\Dockerfile").replace('image', $containerImage) `
-    | Set-Content "$configPath\Dockerfile"
-
-    $exec = Start-ExternalCommand -ScriptBlock { docker build -f "$configPath\Dockerfile" -t $imageName . } `
-    -ErrorMessage "`nFailed to build docker image with $LastExitCode`n"
-
-    if ($exec[0] -eq 0) {
-        $TestsStatus.BuildContainerTest = "PASSED"
-        Write-DebugMessage $isDebug -Message "Container built SUCCESSFULLY"
-    }
-
-    $TestsTimers.BuildContainerTime = $exec[1]
-}
-
-function Start-BuiltContainer {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$imageName,
-        [Parameter(Mandatory=$true)]
-        [string]$containerName,
-        [Parameter(Mandatory=$true)]
-        [string]$bindMount
-    )
-
-    $exec = Start-ExternalCommand -ScriptBlock { docker run --name $containerName -d -p 8080:80 -v "$bindMount`:/data" $imageName } `
-    -ErrorMessage "`nFailed to run built docker image with $LastExitCode`n"
-}
-
 function ProcessWorkingSetInfoById {
     param
     ([int]$processId)
@@ -416,6 +189,26 @@ function ProcessWorkingSetInfoById {
 }
 
 function Test-Runner {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$command,
+        [string]$time,
+        [string]$test
+    )
+
+    $exec = Start-ExternalCommand -ScriptBlock { Invoke-Expression $command } `
+    -ErrorMessage "`nFailed test with $LastExitCode`n"
+
+    if ($time -ne 'none') {
+        if ($exec[0] -eq 0) {
+            $TestsStatus.$test = "PASSED"
+            Write-DebugMessage $isDebug -Message "$test ran SUCCESSFULLY"
+        }
+        $TestsTimers.$time = $exec[1]
+    }
+}
+
+function Test-Executor {
     Param(
         [Parameter(Mandatory=$true)]
         [string]$volumeName,
@@ -444,6 +237,7 @@ function Test-Runner {
                     CreateVolumeTime = 0
                     BuildContainerTime = 0
                     CreateNetworkTime = 0
+                    StartBuiltContainerTime = 0
                     ConnectNetworkTime = 0
                     HTTPGetTime = 0
                     CreateContainerTime = 0
@@ -454,6 +248,7 @@ function Test-Runner {
                     RunContainerTime = 0
                     RemoveContainerTime = 0
                     RemoveImageTime = 0
+                    SharedVolumeTime = 0
                     }
 
     $TestsStatus = [DockerTestsStatus]@{
@@ -461,6 +256,7 @@ function Test-Runner {
                     CreateVolumeTest = "FAILED"
                     BuildContainerTest = "FAILED"
                     CreateNetworkTest = "FAILED"
+                    StartBuiltContainerTest = "FAILED"
                     ConnectNetworkTest = "FAILED"
                     HTTPGetTest = "FAILED"
                     CreateContainerTest = "FAILED"
@@ -479,51 +275,41 @@ function Test-Runner {
     Write-Output "Starting tests" >> tests.log
     Write-Output "================================================================" >> tests.log
 
-    New-Image $imageName
+    (Get-Content "$configPath").replace('image', $imageName) `
+    | Set-Content "$configPath"
 
-    New-Volume $volumeName
-
-    New-Network $networkName
-
-    Test-Building $containerName $imageName $configPath $builtContainerImageName
-    #Start-BuiltContainer $builtContainerImageName $containerName $bindMountPath
-
-    # windows does not support connecting a running container to a network
-    $ignoredResult =  docker stop $containerName
-    Connect-Network $networkName $containerName
-
-    Start-BuiltContainer $builtContainerImageName $containerName $bindMountPath
-    Get-SharedVolume $containerName
+    Test-Runner "docker pull $imageName"  "PullImageTime"  "PullImageTest"
+    Test-Runner "docker volume create $volumeName"  "CreateVolumeTime" "CreateVolumeTest"
+    Test-Runner "docker network create -d nat $networkName" "CreateNetworkTime" "CreateNetworkTest"
+    Test-Runner "docker build -f $configPath -t $imageName ." "BuildContainerTime" "BuildContainerTest"
+    Test-Runner "docker network connect $networkName $containerName" "ConnectNetworkTime" "ConnectNetworkTest"
+    Test-Runner "docker run --name $containerName -d -p 8080:80 -v $bindMountPath $imageName" "StartBuiltContainerTime" "StartBuiltContainerTest"
+    Test-Runner "docker exec $containerName ls /test" "SharedVolumeTime" "SharedVolumeTest"
 
     $ignoredResult = docker stop $containerName
     $ignoredResult = docker rm $containerName
 
-    $ignoredResult = Create-Container -containerName `
+    $ignoredResult = Test-CreateContainer -containerName `
     $containerName -containerImage $imageName `
     -exposePorts -nodePort $nodePort -containerPort $containerPort `
 
-    Start-Container $containerName
-
-    Exec-Command $containerName
-    Test-Restart $containerName
+    Test-Runner "docker start $containerName" "StartContainerTime" "StartContainerTest"
+    Test-Runner "docker exec $containerName ls" "ExecProcessInContainerTime" "ExecProcessInContainerTest"
+    Test-Runner "docker restart $containerName" "RestartContainerTime" "RestartContainerTest"
 
     $newProcess = Get-Process vmmem
     $workinginfo = ProcessWorkingSetInfoById $newProcess.id
 
-    $UVM = Get-ComputeProcess 
-
-    # get the OS memory usage from the guest os
+    $UVM = Get-ComputeProcess
     $memoryUsedByUVMOS=hcsdiag exec -uvm $UVM.id free
+
     Get-HTTPGet $host_ip
 
-    Stop-Container $containerName
-    Remove-Container $containerName
-    Remove-Image $imageName
+    Test-Runner "docker stop $containerName" "StopContainerTime" "StopContainerTest"
+    Test-Runner "docker rm $containerName" "RemoveContainerTime" "RemoveContainerTest"
+    Test-Runner "docker rmi $imageName" "RemoveImageTime" "RemoveImageTest"
 
-
-
-    #$created = Get-Attribute container $containerName Created
-    #Write-Output $created
+    #left functions: Test-CreateContainer, Get-HTTPGet
 
     Write-Output "----------------------------------------------------------------" >> tests.log
     Write-Output " Test results for the tests" >> tests.log
@@ -552,6 +338,6 @@ $dockerVersion > tests.log
 
 Clear-Environment
 
-Test-Runner $VOLUME_NAME $CONTAINER_IMAGE $NETWORK_NAME $CONTAINER_NAME $CONFIGS_PATH $BINDMOUNT_PATH $BUILD_CONTAINER_IMAGE_NAME $HOST_IP $NODE_PORT $CONTAINER_PORT
+Test-Executor $VOLUME_NAME $CONTAINER_IMAGE $NETWORK_NAME $CONTAINER_NAME $CONFIGS_PATH $BINDMOUNT_PATH $BUILD_CONTAINER_IMAGE_NAME $HOST_IP $NODE_PORT $CONTAINER_PORT
 
 Clear-Environment

@@ -1,3 +1,3 @@
 FROM nginx
 
-RUN mkdir /data
+RUN mkdir /test
