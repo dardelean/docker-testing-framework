@@ -5,6 +5,7 @@ Param(
 )
 
 #$ErrorActionPreference = "Stop"
+#$HOST_IP =$args[0]
 $WORK_PATH = Split-Path -parent $MyInvocation.MyCommand.Definition
 $CONFIGS_PATH = $WORK_PATH + "\configs\Dockerfile"
 $BINDMOUNT_PATH = $WORK_PATH + "\test:/test"
@@ -15,9 +16,8 @@ $CONTAINER_PORT = 80
 $NODE_PORT = 8080
 $VOLUME_NAME = "vol1"
 $NETWORK_NAME = "net1"
-$HOST_IP = "10.7.1.12"
 $MINIMUM_PROCESS = "vmmem"
-    
+
 Import-Module "$WORK_PATH\DockerUtils"
 
 class WorkingSet
@@ -225,8 +225,6 @@ function Test-Executor {
         [Parameter(Mandatory=$true)]
         [string]$builtContainerImageName,
         [Parameter(Mandatory=$true)]
-        [string]$host_ip,
-        [Parameter(Mandatory=$true)]
         [int]$nodePort,
         [Parameter(Mandatory=$true)]
         [int]$containerPort
@@ -239,7 +237,6 @@ function Test-Executor {
                     CreateNetworkTime = 0
                     StartBuiltContainerTime = 0
                     ConnectNetworkTime = 0
-                    HTTPGetTime = 0
                     CreateContainerTime = 0
                     StartContainerTime = 0
                     ExecProcessInContainerTime = 0
@@ -258,7 +255,6 @@ function Test-Executor {
                     CreateNetworkTest = "FAILED"
                     StartBuiltContainerTest = "FAILED"
                     ConnectNetworkTest = "FAILED"
-                    HTTPGetTest = "FAILED"
                     CreateContainerTest = "FAILED"
                     StartContainerTest = "FAILED"
                     ExecProcessInContainerTest = "FAILED"
@@ -303,7 +299,7 @@ function Test-Executor {
     $UVM = Get-ComputeProcess
     $memoryUsedByUVMOS=hcsdiag exec -uvm $UVM.id free
 
-    Get-HTTPGet $host_ip
+    #Get-HTTPGet $host_ip
 
     Test-Runner "docker stop $containerName" "StopContainerTime" "StopContainerTest"
     Test-Runner "docker rm $containerName" "RemoveContainerTime" "RemoveContainerTest"
@@ -338,6 +334,6 @@ $dockerVersion > tests.log
 
 Clear-Environment
 
-Test-Executor $VOLUME_NAME $CONTAINER_IMAGE $NETWORK_NAME $CONTAINER_NAME $CONFIGS_PATH $BINDMOUNT_PATH $BUILD_CONTAINER_IMAGE_NAME $HOST_IP $NODE_PORT $CONTAINER_PORT
+Test-Executor $VOLUME_NAME $CONTAINER_IMAGE $NETWORK_NAME $CONTAINER_NAME $CONFIGS_PATH $BINDMOUNT_PATH $BUILD_CONTAINER_IMAGE_NAME $NODE_PORT $CONTAINER_PORT
 
 Clear-Environment
