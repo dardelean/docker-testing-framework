@@ -5,7 +5,6 @@ Param(
 )
 
 #$ErrorActionPreference = "Stop"
-#$HOST_IP =$args[0]
 $WORK_PATH = Split-Path -parent $MyInvocation.MyCommand.Definition
 $CONFIGS_PATH = $WORK_PATH + "\configs\Dockerfile"
 $BINDMOUNT_PATH = $WORK_PATH + "\test:/test"
@@ -26,46 +25,6 @@ class WorkingSet
     [ValidateNotNullOrEmpty()][int]$Private_Workingset
     [ValidateNotNullOrEmpty()][int]$Shared_Workingset
     [ValidateNotNullOrEmpty()][int]$CommitSize
-}
-
-class DockerTestsStatus
-{
-    [ValidateNotNullOrEmpty()][string]$PullImageTest
-    [ValidateNotNullOrEmpty()][string]$CreateVolumeTest
-    [ValidateNotNullOrEmpty()][string]$BuildContainerTest
-    [ValidateNotNullOrEmpty()][string]$CreateNetworkTest
-    [ValidateNotNullOrEmpty()][string]$StartBuiltContainerTest
-    [ValidateNotNullOrEmpty()][string]$ConnectNetworkTest
-    [ValidateNotNullOrEmpty()][string]$HTTPGetTest
-    [ValidateNotNullOrEmpty()][string]$CreateContainerTest
-    [ValidateNotNullOrEmpty()][string]$StartContainerTest
-    [ValidateNotNullOrEmpty()][string]$ExecProcessInContainerTest
-    [ValidateNotNullOrEmpty()][string]$RestartContainerTest
-    [ValidateNotNullOrEmpty()][string]$StopContainerTest
-    [ValidateNotNullOrEmpty()][string]$RunContainerTest
-    [ValidateNotNullOrEmpty()][string]$RemoveContainerTest
-    [ValidateNotNullOrEmpty()][string]$RemoveImageTest
-    [ValidateNotNullOrEmpty()][string]$SharedVolumeTest
-}
-
-class DockerTestsTimer
-{
-    [ValidateNotNullOrEmpty()][int]$PullImageTime
-    [ValidateNotNullOrEmpty()][int]$CreateVolumeTime
-    [ValidateNotNullOrEmpty()][int]$BuildContainerTime
-    [ValidateNotNullOrEmpty()][int]$CreateNetworkTime
-    [ValidateNotNullOrEmpty()][int]$StartBuiltContainerTime
-    [ValidateNotNullOrEmpty()][int]$ConnectNetworkTime
-    [ValidateNotNullOrEmpty()][int]$HTTPGetTime
-    [ValidateNotNullOrEmpty()][int]$CreateContainerTime
-    [ValidateNotNullOrEmpty()][int]$StartContainerTime
-    [ValidateNotNullOrEmpty()][int]$ExecProcessInContainerTime
-    [ValidateNotNullOrEmpty()][int]$RestartContainerTime
-    [ValidateNotNullOrEmpty()][int]$StopContainerTime
-    [ValidateNotNullOrEmpty()][int]$RunContainerTime
-    [ValidateNotNullOrEmpty()][int]$RemoveContainerTime
-    [ValidateNotNullOrEmpty()][int]$RemoveImageTime
-    [ValidateNotNullOrEmpty()][int]$SharedVolumeTime
 }
 
 function Test-CreateContainer {
@@ -105,33 +64,18 @@ function Test-CreateContainer {
     -ErrorMessage "`nFailed to create container with $LastExitCode`n"
 
     if ($exec[0] -eq '0') {
-        $TestsStatus.CreateContainerTest = "PASSED"
+        $test_status = "PASSED"
+        $test_time = $exec[1]
         Write-DebugMessage $isDebug -Message "Container created SUCCESSFULLY"
-    }
-
-    $TestsTimers.CreateContainerTime = $exec[1]
-}
-
-function Get-HTTPGet {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$host_ip
-    )
-
-    $address = 'http://' + $host_ip + ':8080'
-    $stopwatch=[System.Diagnostics.Stopwatch]::startNew()
-    $res = Invoke-WebRequest -Uri $address
-    $stopwatch.Stop()
-    $exectime = $stopwatch.ElapsedMilliseconds
-
-    if (!$res) {
-        TestsStatus.HTTPGetTest = "FAILED"
     } else {
-        Write-DebugMessage $isDebug -Message "Container responded to HTTP GET SUCCESSFULLY"
-        #Write-Output "`nExecuting: HTTPGet`t`tPASSED  elpased time:`t$exectime ms`n" >> tests.log
-        $TestsStatus.HTTPGetTest = "PASSED"
-        $TestsTimers.HTTPGetTime = $exectime
+        $test_status = "FAILED"
+        $test_time = 0
+        Write-DebugMessage $isDebug -Message "$test ran FAILED"
     }
+
+    $test_dict = @{TestName = "CreateContainerTest"; Status = $test_status; Time = $test_time}
+
+    return $test_dict
 }
 
 function Get-Attribute {
@@ -192,20 +136,25 @@ function Test-Runner {
     Param(
         [Parameter(Mandatory=$true)]
         [string]$command,
-        [string]$time,
         [string]$test
     )
 
     $exec = Start-ExternalCommand -ScriptBlock { Invoke-Expression $command } `
     -ErrorMessage "`nFailed test with $LastExitCode`n"
 
-    if ($time -ne 'none') {
-        if ($exec[0] -eq 0) {
-            $TestsStatus.$test = "PASSED"
-            Write-DebugMessage $isDebug -Message "$test ran SUCCESSFULLY"
-        }
-        $TestsTimers.$time = $exec[1]
+    if ($exec[0] -eq 0) {
+        $test_status = "PASSED"
+        $test_time = $exec[1]
+        Write-DebugMessage $isDebug -Message "$test ran SUCCESSFULLY"
+    } else {
+        $test_status = "FAILED"
+        $test_time = 0
+        Write-DebugMessage $isDebug -Message "$test ran FAILED"
     }
+
+    $test_dict = @{TestName = $test; Status = $test_status; Time = $test_time}
+
+    return $test_dict
 }
 
 function Test-Executor {
@@ -230,43 +179,6 @@ function Test-Executor {
         [int]$containerPort
     )
 
-    $TestsTimers = [DockerTestsTimer]@{
-                    PullImageTime = 0
-                    CreateVolumeTime = 0
-                    BuildContainerTime = 0
-                    CreateNetworkTime = 0
-                    StartBuiltContainerTime = 0
-                    ConnectNetworkTime = 0
-                    CreateContainerTime = 0
-                    StartContainerTime = 0
-                    ExecProcessInContainerTime = 0
-                    RestartContainerTime = 0
-                    StopContainerTime = 0
-                    RunContainerTime = 0
-                    RemoveContainerTime = 0
-                    RemoveImageTime = 0
-                    SharedVolumeTime = 0
-                    }
-
-    $TestsStatus = [DockerTestsStatus]@{
-                    PullImageTest = "FAILED"
-                    CreateVolumeTest = "FAILED"
-                    BuildContainerTest = "FAILED"
-                    CreateNetworkTest = "FAILED"
-                    StartBuiltContainerTest = "FAILED"
-                    ConnectNetworkTest = "FAILED"
-                    CreateContainerTest = "FAILED"
-                    StartContainerTest = "FAILED"
-                    ExecProcessInContainerTest = "FAILED"
-                    RestartContainerTest = "FAILED"
-                    StopContainerTest = "FAILED"
-                    RunContainerTest = "FAILED"
-                    RemoveContainerTest = "FAILED"
-                    RemoveImageTest = "FAILED"
-                    SharedVolumeTest = "FAILED"
-                    }
-
-
     Write-Output "`n================================================================" >> tests.log
     Write-Output "Starting tests" >> tests.log
     Write-Output "================================================================" >> tests.log
@@ -274,13 +186,16 @@ function Test-Executor {
     (Get-Content "$configPath").replace('image', $imageName) `
     | Set-Content "$configPath"
 
-    Test-Runner "docker pull $imageName"  "PullImageTime"  "PullImageTest"
-    Test-Runner "docker volume create $volumeName"  "CreateVolumeTime" "CreateVolumeTest"
-    Test-Runner "docker network create -d nat $networkName" "CreateNetworkTime" "CreateNetworkTest"
-    Test-Runner "docker build -f $configPath -t $imageName ." "BuildContainerTime" "BuildContainerTest"
-    Test-Runner "docker network connect $networkName $containerName" "ConnectNetworkTime" "ConnectNetworkTest"
-    Test-Runner "docker run --name $containerName -d -p 8080:80 -v $bindMountPath $imageName" "StartBuiltContainerTime" "StartBuiltContainerTest"
-    Test-Runner "docker exec $containerName ls /test" "SharedVolumeTime" "SharedVolumeTest"
+    # the array that holds the tests
+    $testsArray = @()
+
+    $testsArray += Test-Runner "docker pull $imageName" "PullImageTest"
+    $testsArray += Test-Runner "docker volume create $volumeName"  "CreateVolumeTest"
+    $testsArray += Test-Runner "docker network create -d nat $networkName" "CreateNetworkTest"
+    $testsArray += Test-Runner "docker build -f $configPath -t $imageName ." "BuildContainerTest"
+    $testsArray += Test-Runner "docker network connect $networkName $containerName" "ConnectNetworkTest"
+    $testsArray += Test-Runner "docker run --name $containerName -d -p 8080:80 -v $bindMountPath $imageName" "StartBuiltContainerTest"
+    $testsArray += Test-Runner "docker exec $containerName ls /test" "SharedVolumeTest"
 
     $ignoredResult = docker stop $containerName
     $ignoredResult = docker rm $containerName
@@ -289,9 +204,9 @@ function Test-Executor {
     $containerName -containerImage $imageName `
     -exposePorts -nodePort $nodePort -containerPort $containerPort `
 
-    Test-Runner "docker start $containerName" "StartContainerTime" "StartContainerTest"
-    Test-Runner "docker exec $containerName ls" "ExecProcessInContainerTime" "ExecProcessInContainerTest"
-    Test-Runner "docker restart $containerName" "RestartContainerTime" "RestartContainerTest"
+    $testsArray += Test-Runner "docker start $containerName" "StartContainerTest"
+    $testsArray += Test-Runner "docker exec $containerName ls" "ExecProcessInContainerTest"
+    $testsArray += Test-Runner "docker restart $containerName" "RestartContainerTest"
 
     $newProcess = Get-Process vmmem
     $workinginfo = ProcessWorkingSetInfoById $newProcess.id
@@ -299,23 +214,14 @@ function Test-Executor {
     $UVM = Get-ComputeProcess
     $memoryUsedByUVMOS=hcsdiag exec -uvm $UVM.id free
 
-    #Get-HTTPGet $host_ip
-
-    Test-Runner "docker stop $containerName" "StopContainerTime" "StopContainerTest"
-    Test-Runner "docker rm $containerName" "RemoveContainerTime" "RemoveContainerTest"
-    Test-Runner "docker rmi $imageName" "RemoveImageTime" "RemoveImageTest"
-
-    #left functions: Test-CreateContainer, Get-HTTPGet
+    $testsArray += Test-Runner "docker stop $containerName" "StopContainerTest"
+    $testsArray += Test-Runner "docker rm $containerName" "RemoveContainerTest"
+    $testsArray += Test-Runner "docker rmi $imageName" "RemoveImageTest"
 
     Write-Output "----------------------------------------------------------------" >> tests.log
     Write-Output " Test results for the tests" >> tests.log
     Write-Output "----------------------------------------------------------------" >> tests.log
-    $TestsStatus | Format-Table >> tests.log
-
-    Write-Output "----------------------------------------------------------------" >> tests.log
-    Write-Output " Timer results for the tests in ms" >> tests.log
-    Write-Output "----------------------------------------------------------------" >> tests.log
-    $TestsTimers | Format-Table >> tests.log
+    $testsArray | ConvertTo-Json > tests.json
 
     Clear-Environment
 
