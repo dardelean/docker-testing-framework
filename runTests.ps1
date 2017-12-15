@@ -201,7 +201,8 @@ function Test-Executor {
 
     $testsArray += Test-CreateContainer -containerName $containerName -containerImage $imageName -exposePorts -nodePort $nodePort -containerPort $containerPort
 
-    $testsArray += Test-Runner "docker network connect $networkName $containerName" "ConnectNetworkTest"
+    # TODO
+    #$testsArray += Test-Runner "docker network connect $networkName $containerName" "ConnectNetworkTest"
     $testsArray += Test-Runner "docker start $containerName" "StartContainerTest"
     $testsArray += Test-Runner "docker exec $containerName ls" "ExecProcessInContainerTest"
     $testsArray += Test-Runner "docker restart $containerName" "RestartContainerTest"
@@ -220,6 +221,7 @@ function Test-Executor {
     Write-Output " Test results for the tests" >> tests.log
     Write-Output "----------------------------------------------------------------" >> tests.log
     $testsArray | ConvertTo-Json > tests.json
+
 
     Clear-Environment
 
