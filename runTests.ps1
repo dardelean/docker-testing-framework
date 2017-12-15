@@ -1,5 +1,6 @@
 #Set-PSDebug -trace 2
 # Script that tests Docker on Windows functionality
+
 Param(
     [string]$isDebug='no' 
 )
@@ -189,38 +190,43 @@ function Test-Executor {
     # the array that holds the tests
     $testsArray = @()
 
-    $testsArray += Test-Runner "docker pull $imageName" "PullImageTest"
-    $testsArray += Test-Runner "docker volume create $volumeName"  "CreateVolumeTest"
-    $testsArray += Test-Runner "docker network create -d nat $networkName" "CreateNetworkTest"
-    $testsArray += Test-Runner "docker build -f $configPath -t $imageName ." "BuildContainerTest"
-    $testsArray += Test-Runner "docker run --name $containerName -d -p 8080:80 -v $bindMountPath $imageName" "StartBuiltContainerTest"
-    $testsArray += Test-Runner "docker exec $containerName ls /test" "SharedVolumeTest"
+    # some functionality tests
+    $testsArray += Test-Runner "docker pull $imageName" "Pull_Image_Test"
+    $testsArray += Test-Runner "docker volume create $volumeName"  "Create_Volume_Test"
+    $testsArray += Test-Runner "docker network create -d nat $networkName" "Create_Network_Test"
 
-    $ignoredResult = docker stop $containerName
-    $ignoredResult = docker rm $containerName
+    # tests on a container built from Dockerfile
+    $testsArray += Test-Runner "docker build -f $configPath -t $imageName ." "Build_Container_Test"
+    $testsArray += Test-Runner "docker run --name $containerName -d -p 8080:80 -v $bindMountPath $imageName" "Start_Built_Container_Test"
+    $testsArray += Test-Runner "docker exec $containerName ls /test" "Built_Container_Shared_Volume_Test"
+    $testsArray += Test-Runner "docker stop $containerName" "Stop_Built_Container_Test"
+    $testsArray += Test-Runner "docker rm $containerName" "Remove_Built_Container_Test"
 
+    # tests on a container created normally, not built from Dockerfile
     $testsArray += Test-CreateContainer -containerName $containerName -containerImage $imageName -exposePorts -nodePort $nodePort -containerPort $containerPort
-
     # TODO
     #$testsArray += Test-Runner "docker network connect $networkName $containerName" "ConnectNetworkTest"
-    $testsArray += Test-Runner "docker start $containerName" "StartContainerTest"
-    $testsArray += Test-Runner "docker exec $containerName ls" "ExecProcessInContainerTest"
-    $testsArray += Test-Runner "docker restart $containerName" "RestartContainerTest"
+    $testsArray += Test-Runner "docker start $containerName" "Start_Container_Test"
+    $testsArray += Test-Runner "docker exec $containerName ls" "Exec_Process_In_Container_Test"
+    $testsArray += Test-Runner "docker restart $containerName" "Restart_Container_Test"
 
     $newProcess = Get-Process vmmem
     $workinginfo = ProcessWorkingSetInfoById $newProcess.id
-
     $UVM = Get-ComputeProcess
     $memoryUsedByUVMOS=hcsdiag exec -uvm $UVM.id free
 
-    $testsArray += Test-Runner "docker stop $containerName" "StopContainerTest"
-    $testsArray += Test-Runner "docker rm $containerName" "RemoveContainerTest"
-    $testsArray += Test-Runner "docker rmi $imageName" "RemoveImageTest"
+    $testsArray += Test-Runner "docker stop $containerName" "Stop_Container_Test"
+    $testsArray += Test-Runner "docker rm $containerName" "Remove_Container_Test"
+    $testsArray += Test-Runner "docker rmi $imageName" "Remove_Image_Test"
 
     Write-Output "----------------------------------------------------------------" >> tests.log
     Write-Output " Test results for the tests" >> tests.log
     Write-Output "----------------------------------------------------------------" >> tests.log
     $testsArray | ConvertTo-Json > tests.json
+    $testsArray | Format-Table >> tests.log
+
+    Write-Host "`nMemory used by the Linux OS running inside the new UVM" >> tests.log
+    Write-Output $memoryUsedByUVMOS >> tests.log
 
 
     Clear-Environment
