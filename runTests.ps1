@@ -74,7 +74,8 @@ function Test-CreateContainer {
         Write-DebugMessage $isDebug -Message "$test ran FAILED"
     }
 
-    $test_dict = @{TestName = "CreateContainerTest"; Status = $test_status; Time = $test_time}
+    $test_date = $(Get-Date -Format "MM/dd/yyyy hh:mm:ss")
+    $test_dict = @{TestName = "CreateContainerTest"; TestResult = $test_status; TestDuration = $test_time; TestDate = $test_date}
 
     return $test_dict
 }
@@ -153,7 +154,8 @@ function Test-Runner {
         Write-DebugMessage $isDebug -Message "$test ran FAILED"
     }
 
-    $test_dict = @{TestName = $test; Status = $test_status; Time = $test_time}
+    $test_date = $(Get-Date -Format "MM/dd/yyyy hh:mm:ss")
+    $test_dict = @{TestName = $test; TestResult = $test_status; TestDuration = $test_time; TestDate = $test_date}
 
     return $test_dict
 }
